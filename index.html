@@ -44,7 +44,6 @@ h1 { font-size: 24px; }
     <h1>📧 Email Triage Dashboard</h1>
     <button class="refresh" onclick="loadEmails()">🔄 Refresh</button>
   </div>
-
   <div id="error"></div>
   <div id="stats" class="stats" style="display:none"></div>
   <div id="filters" class="filters" style="display:none"></div>
@@ -55,18 +54,21 @@ h1 { font-size: 24px; }
 const API = 'https://script.google.com/macros/s/AKfycbxHUp9nf6vume4_MrjqhfRgubauKcOTYuh4mIawAyuRT1YdZEYNtXBQrQyB8TUC-rki/exec';
 let all = [], filter = 'ALL';
 
-async function loadEmails() {
+function loadEmails() {
   document.getElementById('emails').innerHTML = '<div class="loading">Loading your emails...</div>';
   document.getElementById('error').innerHTML = '';
 
-  try {
-    const res = await fetch(API);
-    all = await res.json();
-    if (!all.length) return showError('No emails found.');
+  // Use JSONP to bypass CORS
+  window.handleEmails = function(data) {
+    all = data;
+    if (!all.length) return showError('No unread emails found.');
     render();
-  } catch (err) {
-    showError('Failed to load emails. Make sure your Apps Script is deployed and accessible.');
-  }
+  };
+
+  const script = document.createElement('script');
+  script.src = API + '?callback=handleEmails';
+  script.onerror = () => showError('Failed to load. Try redeploying your Apps Script.');
+  document.body.appendChild(script);
 }
 
 function render() {
@@ -119,7 +121,10 @@ function toggle(i) {
 function markDone(i) { all[i].done = true; render(); }
 function snooze(i) { all.splice(i,1); render(); }
 function setFilter(f) { filter = f; render(); }
-function showError(msg) { document.getElementById('error').innerHTML = `<div class="error">⚠️ ${msg}</div>`; document.getElementById('emails').innerHTML = ''; }
+function showError(msg) {
+  document.getElementById('error').innerHTML = `<div class="error">⚠️ ${msg}</div>`;
+  document.getElementById('emails').innerHTML = '';
+}
 
 loadEmails();
 </script>
