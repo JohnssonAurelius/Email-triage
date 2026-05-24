@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; padding: 20px; }
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { margin-bottom: 10px; font-size: 28px; }
+.subtitle { color: #666; margin-bottom: 20px; font-size: 14px; }
+.setup { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+.setup input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.setup button { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+.setup button:hover { background: #1d4ed8; }
+.stats { display: flex; gap: 15px; margin-bottom: 20px; }
+.stat { flex: 1; background: white; padding: 15px; border-radius: 8px; text-align: center; }
+.stat-num { font-size: 28px; font-weight: 700; color: #2563eb; }
+.stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+.filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-btn { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+.filter-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+.emails { display: grid; gap: 12px; }
+.email { background: white; border-left: 4px solid; border-radius: 8px; padding: 0; overflow: hidden; cursor: pointer; transition: box-shadow 0.2s; }
+.email:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.urgent { border-color: #ef4444; }
+.important { border-color: #f59e0b; }
+.action { border-color: #3b82f6; }
+.fyi { border-color: #10b981; }
+.email-header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: flex-start; }
+.email-info { flex: 1; }
+.email-label { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; display: inline-block; margin-bottom: 6px; }
+.label-urgent { background: #ef4444; color: white; }
+.label-important { background: #f59e0b; color: white; }
+.label-action { background: #3b82f6; color: white; }
+.label-fyi { background: #10b981; color: white; }
+.email-subject { font-weight: 600; margin: 4px 0; }
+.email-from { font-size: 12px; color: #666; }
+.email-actions { display: flex; gap: 8px; }
+.action-btn { padding: 6px 12px; font-size: 11px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+.action-btn:hover { background: #f5f5f5; border-color: #999; }
+.action-btn.done { background: #10b981; color: white; border-color: #10b981; }
+.email-expanded { background: #f9f9f9; padding: 12px 16px; border-top: 1px solid #eee; }
+.email-body { font-size: 13px; line-height: 1.5; color: #444; margin-bottom: 10px; }
+.email-task { background: #eff6ff; padding: 8px 12px; border-left: 3px solid #3b82f6; margin: 8px 0; border-radius: 3px; font-size: 12px; }
+.email-deadline { background: #fef2f2; padding: 8px 12px; border-left: 3px solid #ef4444; margin: 8px 0; border-radius: 3px; font-size: 12px; }
+.loading { text-align: center; padding: 40px; color: #666; }
+.spinner { display: inline-block; width: 30px; height: 30px; border: 3px solid #ddd; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 40px; color: #999; }
+.error { background: #fef2f2; color: #991b1b; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📧 Email Triage Dashboard</h1>
+<div class="subtitle">Connect your Google Sheet to see AI-analyzed emails</div>
+
+<div class="setup">
+<label>Google Sheet URL or ID:</label>
+<input type="text" id="sheetId" placeholder="Paste your Google Sheet URL or Sheet ID" value="">
+<small style="color: #666; display: block; margin: 8px 0;">
+  Tip: Share your sheet publicly (Anyone with link can view), then paste URL here
+</small>
+<button onclick="loadSheet()">Load Emails</button>
+</div>
+
+<div id="error"></div>
+<div id="stats" class="stats" style="display:none;"></div>
+<div class="filters" id="filters" style="display:none;"></div>
+<div id="content"></div>
+</div>
+
+<script>
+let allEmails = [];
+let currentFilter = 'ALL';
+
+function extractSheetId(input) {
+  const match = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return match ? match[1] : input;
+}
+
+async function loadSheet() {
+  const input = document.getElementById('sheetId').value.trim();
+  if (!input) return showError('Paste a Sheet URL or ID');
+  
+  const sheetId = extractSheetId(input);
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+  
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top: 10px;">Loading emails...</div></div>';
+  
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    const json = JSON.parse(text.substring(47).slice(0, -2));
+    
+    allEmails = json.table.rows.slice(1).map(row => ({
+      subject: row.c[0]?.v || '',
+      from: row.c[1]?.v || '',
+      category: row.c[2]?.v || 'FYI',
+      body: row.c[3]?.v || '',
+      task: row.c[4]?.v || null,
+      deadline: row.c[5]?.v || null,
+    })).filter(e => e.subject);
+    
+    if (allEmails.length === 0) return showError('No emails found in sheet');
+    displayEmails();
+  } catch (err) {
+    showError('Error loading sheet: ' + err.message + '. Make sure sheet is public & URL is correct.');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('error').innerHTML = `<div class="error">⚠️ ${msg}</div>`;
+}
+
+function displayEmails() {
+  document.getElementById('error').innerHTML = '';
+  const counts = { URGENT: 0, IMPORTANT: 0, ACTION: 0, FYI: 0 };
+  
+  allEmails.forEach(e => counts[e.category] = (counts[e.category] || 0) + 1);
+  
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-num">${counts.URGENT || 0}</div><div class="stat-label">Urgent</div></div>
+    <div class="stat"><div class="stat-num">${counts.IMPORTANT || 0}</div><div class="stat-label">Important</div></div>
+    <div class="stat"><div class="stat-num">${counts.ACTION || 0}</div><div class="stat-label">Tasks</div></div>
+    <div class="stat"><div class="stat-num">${counts.FYI || 0}</div><div class="stat-label">FYI</div></div>
+  `;
+  document.getElementById('stats').style.display = 'flex';
+  
+  const filters = ['ALL', 'URGENT', 'IMPORTANT', 'ACTION', 'FYI'];
+  document.getElementById('filters').innerHTML = filters.map(f => 
+    `<button class="filter-btn ${f === currentFilter ? 'active' : ''}" onclick="filterEmails('${f}')">${f}</button>`
+  ).join('');
+  document.getElementById('filters').style.display = 'flex';
+  
+  renderEmails();
+}
+
+function filterEmails(cat) {
+  currentFilter = cat;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderEmails();
+}
+
+function renderEmails() {
+  const filtered = currentFilter === 'ALL' ? allEmails : allEmails.filter(e => e.category === currentFilter);
+  
+  if (filtered.length === 0) {
+    document.getElementById('content').innerHTML = '<div class="empty">No emails in this category</div>';
+    return;
+  }
+  
+  document.getElementById('content').innerHTML = '<div class="emails">' + filtered.map((e, i) => `
+    <div class="email ${e.category.toLowerCase()}" onclick="toggleExpand(${i})">
+      <div class="email-header">
+        <div class="email-info">
+          <div class="email-label label-${e.category.toLowerCase()}">${e.category}</div>
+          <div class="email-subject">${e.subject}</div>
+          <div class="email-from">From: ${e.from}</div>
+        </div>
+        <div class="email-actions" onclick="event.stopPropagation();">
+          <button class="action-btn" onclick="markDone(${i})">✓ Done</button>
+          <button class="action-btn" onclick="snooze(${i})">⏰ Snooze</button>
+        </div>
+      </div>
+      <div id="expanded-${i}" style="display:none;">
+        <div class="email-expanded">
+          ${e.body ? `<div class="email-body">${e.body.substring(0, 300)}...</div>` : ''}
+          ${e.task ? `<div class="email-task">📌 Task: ${e.task}</div>` : ''}
+          ${e.deadline ? `<div class="email-deadline">⏰ Due: ${e.deadline}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('') + '</div>';
+}
+
+function toggleExpand(i) {
+  const el = document.getElementById(`expanded-${i}`);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function markDone(i) {
+  allEmails.splice(i, 1);
+  renderEmails();
+}
+
+function snooze(i) {
+  allEmails[i].snoozed = true;
+  alert('Snoozed for 24 hours (in a real version, this syncs back to Gmail)');
+  markDone(i);
+}
+
+document.getElementById('sheetId').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') loadSheet();
+});
+</script>
+</body>
+</html>
