@@ -5,16 +5,10 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #111; color: #eee; padding: 20px; }
 .container { max-width: 1000px; margin: 0 auto; }
-h1 { font-size: 26px; margin-bottom: 4px; }
-.sub { color: #888; font-size: 13px; margin-bottom: 20px; }
-.setup { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-.setup p { margin-bottom: 10px; font-size: 13px; color: #aaa; line-height: 1.8; }
-.setup input { width: 100%; padding: 10px; background: #2a2a2a; color: #eee; border: 1px solid #444; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
-.row { display: flex; gap: 10px; }
-button { background: #2563eb; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
-button:hover { background: #1d4ed8; }
-.refresh-btn { background: #333; }
-.refresh-btn:hover { background: #444; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+h1 { font-size: 24px; }
+.refresh { background: #333; color: #eee; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.refresh:hover { background: #444; }
 .stats { display: flex; gap: 12px; margin-bottom: 20px; }
 .stat { flex: 1; background: #1e1e1e; padding: 14px; border-radius: 8px; text-align: center; }
 .stat-num { font-size: 28px; font-weight: 700; }
@@ -27,110 +21,52 @@ button:hover { background: #1d4ed8; }
 .email { background: #1e1e1e; border-left: 4px solid; border-radius: 8px; overflow: hidden; cursor: pointer; transition: box-shadow 0.2s; }
 .email:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
 .urgent { border-color: #ef4444; } .important { border-color: #f59e0b; } .action { border-color: #3b82f6; } .fyi { border-color: #10b981; }
-.email-header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+.email-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 3px; display: inline-block; margin-bottom: 5px; }
 .badge-urgent { background: #ef4444; } .badge-important { background: #f59e0b; color:#000; } .badge-action { background: #3b82f6; } .badge-fyi { background: #10b981; color:#000; }
-.subject { font-weight: 600; font-size: 14px; }
-.from { font-size: 12px; color: #888; margin-top: 3px; }
-.btns { display: flex; gap: 8px; }
-.btn { padding: 5px 12px; font-size: 11px; border: 1px solid #444; background: #2a2a2a; color: #eee; border-radius: 4px; cursor: pointer; }
+.subject { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.from { font-size: 12px; color: #888; }
+.btns { display: flex; gap: 8px; flex-shrink: 0; }
+.btn { padding: 6px 14px; font-size: 11px; border: 1px solid #444; background: #2a2a2a; color: #eee; border-radius: 4px; cursor: pointer; }
 .btn:hover { background: #333; }
 .expanded { background: #171717; padding: 14px 16px; border-top: 1px solid #2a2a2a; }
 .body-text { font-size: 13px; color: #bbb; line-height: 1.6; margin-bottom: 10px; }
 .task-box { background: #1a2a3a; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 4px; font-size: 12px; margin: 6px 0; }
-.deadline-box { background: #2a1a1a; border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 4px; font-size: 12px; margin: 6px 0; }
-.done { opacity: 0.4; }
+.deadline-box { background: #2a1a1a; border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 4px; font-size: 12px; margin: 6px 0; color: #f87171; }
+.done { opacity: 0.35; }
+.loading { text-align: center; padding: 40px; color: #888; }
 .error { background: #2a1a1a; color: #f87171; padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
-.loading { text-align: center; padding: 30px; color: #888; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>📧 Email Triage Dashboard</h1>
-  <div class="sub">Paste your Google Sheet link to load emails</div>
-
-  <div class="setup">
-    <p>1. Open your <b>Google Sheet</b><br>
-       2. Copy the URL from the address bar<br>
-       3. Paste it below and click <b>Load Emails</b></p>
-    <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
-    <div class="row">
-      <button onclick="loadSheet()">Load Emails</button>
-      <button class="refresh-btn" onclick="loadSheet()">🔄 Refresh</button>
-    </div>
+  <div class="topbar">
+    <h1>📧 Email Triage Dashboard</h1>
+    <button class="refresh" onclick="loadEmails()">🔄 Refresh</button>
   </div>
 
   <div id="error"></div>
   <div id="stats" class="stats" style="display:none"></div>
   <div id="filters" class="filters" style="display:none"></div>
-  <div id="emails" class="emails"></div>
+  <div id="emails" class="emails"><div class="loading">Loading your emails...</div></div>
 </div>
 
 <script>
-let all = [], filter = 'ALL', savedId = '';
+const API = 'https://script.google.com/macros/s/AKfycbxHUp9nf6vume4_MrjqhfRgubauKcOTYuh4mIawAyuRT1YdZEYNtXBQrQyB8TUC-rki/exec';
+let all = [], filter = 'ALL';
 
-function extractId(url) {
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match ? match[1] : url.trim();
-}
-
-async function loadSheet() {
-  const input = document.getElementById('sheetUrl').value.trim();
-  if (!input) return showError('Paste your Google Sheet URL first');
-
-  savedId = extractId(input);
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${savedId}/export?format=csv`;
-
-  document.getElementById('emails').innerHTML = '<div class="loading">Loading emails...</div>';
+async function loadEmails() {
+  document.getElementById('emails').innerHTML = '<div class="loading">Loading your emails...</div>';
   document.getElementById('error').innerHTML = '';
 
   try {
-    const res = await fetch(csvUrl);
-    if (!res.ok) throw new Error('Could not load sheet');
-    const text = await res.text();
-    parseAndRender(text);
+    const res = await fetch(API);
+    all = await res.json();
+    if (!all.length) return showError('No emails found.');
+    render();
   } catch (err) {
-    showError('Failed to load. Make sure your sheet is shared as "Anyone with the link can view".');
+    showError('Failed to load emails. Make sure your Apps Script is deployed and accessible.');
   }
-}
-
-function parseCSV(text) {
-  const rows = [];
-  let row = [], cell = '', inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i], n = text[i+1];
-    if (c === '"') {
-      if (inQ && n === '"') { cell += '"'; i++; }
-      else inQ = !inQ;
-    } else if (c === ',' && !inQ) {
-      row.push(cell); cell = '';
-    } else if ((c === '\n' || c === '\r') && !inQ) {
-      row.push(cell); cell = '';
-      if (row.some(r => r)) rows.push(row);
-      row = [];
-      if (c === '\r' && n === '\n') i++;
-    } else {
-      cell += c;
-    }
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row); }
-  return rows;
-}
-
-function parseAndRender(text) {
-  const rows = parseCSV(text);
-  all = rows.slice(1).filter(r => r[0]?.trim()).map(r => ({
-    subject: r[0]?.trim() || '',
-    from: r[1]?.trim() || '',
-    category: (r[2]?.trim() || 'FYI').toUpperCase(),
-    body: r[3]?.trim() || '',
-    task: r[4]?.trim() || null,
-    deadline: r[5]?.trim() || null,
-    done: false
-  })).filter(e => e.subject);
-
-  if (!all.length) return showError('No emails found in sheet.');
-  render();
 }
 
 function render() {
@@ -167,8 +103,8 @@ function render() {
       <div id="exp-${i}" style="display:none">
         <div class="expanded">
           ${e.body ? `<div class="body-text">${e.body}</div>` : ''}
-          ${e.task ? `<div class="task-box">📌 Task: ${e.task}</div>` : ''}
-          ${e.deadline ? `<div class="deadline-box">⏰ Deadline: ${e.deadline}</div>` : ''}
+          ${e.task ? `<div class="task-box">📌 ${e.task}</div>` : ''}
+          ${e.deadline ? `<div class="deadline-box">⏰ ${e.deadline}</div>` : ''}
         </div>
       </div>
     </div>
@@ -184,6 +120,8 @@ function markDone(i) { all[i].done = true; render(); }
 function snooze(i) { all.splice(i,1); render(); }
 function setFilter(f) { filter = f; render(); }
 function showError(msg) { document.getElementById('error').innerHTML = `<div class="error">⚠️ ${msg}</div>`; document.getElementById('emails').innerHTML = ''; }
+
+loadEmails();
 </script>
 </body>
 </html>
